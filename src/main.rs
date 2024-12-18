@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     animation_list.push(Box::new(PulseAnimation::new(Hsv { hue: 120, sat: 255, val: 255 }, Duration::from_millis(500))));
     animation_list.push(Box::new(PulseAnimation::new(Hsv { hue: 240, sat: 255, val: 255 }, Duration::from_millis(500))));
 
-    let bluetooth_service = bluetooth_service::setup();
+    let bluetooth_service = bluetooth_service::setup(peripherals.modem);
 
     log::info!("Continue LedStrips!");
 

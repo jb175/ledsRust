@@ -2,6 +2,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use enumset::enum_set;
 
+use esp_idf_hal::modem::Modem;
 use esp_idf_svc::bt::ble::gap::{AdvConfiguration, BleGapEvent, EspBleGap};
 use esp_idf_svc::bt::ble::gatt::server::{ConnectionId, EspGatts, GattsEvent, TransferId};
 use esp_idf_svc::bt::ble::gatt::{
@@ -10,24 +11,14 @@ use esp_idf_svc::bt::ble::gatt::{
 };
 use esp_idf_svc::bt::{BdAddr, Ble, BtDriver, BtStatus, BtUuid};
 use esp_idf_svc::hal::delay::FreeRtos;
-use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::{EspError, ESP_FAIL};
 
-pub fn setup() -> anyhow::Result<()> {
-    log::info!("BLE1");
+pub fn setup(p : Modem) -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
-    log::info!("BLE2");
-    let peripherals = Peripherals::take()?;
-    log::info!("BLE3");
     let nvs = EspDefaultNvsPartition::take()?;
-    log::info!("BLE4");
 
-    let bt = Arc::new(BtDriver::new(peripherals.modem, Some(nvs.clone()))?);
-    log::info!("BLE5");
-
-    bt.set_device_name("leds")?;
-    log::info!("BLE6");
+    let bt = Arc::new(BtDriver::new(p, Some(nvs.clone()))?);
 
     let server = ExampleServer::new(
         Arc::new(EspBleGap::new(bt.clone())?),
