@@ -1,21 +1,16 @@
-use std::{thread, time::Duration};
-use esp_idf_hal::{modem::Modem, prelude::*};
-use esp_idf_sys::*;
-use smart_leds::{SmartLedsWrite, hsv::{Hsv, hsv2rgb}};
+use std::time::Duration;
+use animations::{HsvWrapper, PulseAnimation};
+use esp_idf_hal::prelude::*;
 use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
+use esp_idf_svc::nvs::{EspDefaultNvsPartition, EspNvs};
 
 mod animations;
-use animations::{Animation, PulseAnimation};
 
 mod services;
-use services::bluetooth_service;
+use services::{bluetooth_service, storage_service::StorageService};
 
 fn main() -> anyhow::Result<()> {
-    // It is necessary to call this function once. Otherwise some patches to the runtime
-    // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_svc::sys::link_patches();
-
-    // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
     log::info!("Start LedStrips!");
@@ -26,20 +21,36 @@ fn main() -> anyhow::Result<()> {
     let channel = peripherals.rmt.channel0;
     let mut ws2812 = Ws2812Esp32Rmt::new(channel, led_pin).unwrap();
 
-    // Create animation list
-    let mut animation_list = Vec::new();
-    animation_list.push(Box::new(PulseAnimation::new(Hsv { hue: 0, sat: 255, val: 255 }, Duration::from_millis(500))));
-    animation_list.push(Box::new(PulseAnimation::new(Hsv { hue: 120, sat: 255, val: 255 }, Duration::from_millis(500))));
-    animation_list.push(Box::new(PulseAnimation::new(Hsv { hue: 240, sat: 255, val: 255 }, Duration::from_millis(500))));
+    
+    // Initialize NVS
+    let nvs = EspDefaultNvsPartition::take()?;
 
+    let mut storage_service = StorageService::new(EspNvs::new(nvs, "storage", true)?);
     let bluetooth_service = bluetooth_service::setup(peripherals.modem);
 
-    log::info!("Continue LedStrips!");
+    
+    // Load animation list from NVS
+    let mut animation_list = storage_service.load_animation_list()?;
+
+
+    // // Create animation list
+    // let mut animation_list: Vec<Box<dyn Animation>> = Vec::new();
+    
+    // animation_list.push(Box::new(PulseAnimation::new(HsvWrapper { hue: 0, sat: 255, val: 255 }, Duration::from_millis(500))));
+    // animation_list.push(Box::new(PulseAnimation::new(HsvWrapper { hue: 120, sat: 255, val: 255 }, Duration::from_millis(500))));
+    // animation_list.push(Box::new(PulseAnimation::new(HsvWrapper { hue: 240, sat: 255, val: 255 }, Duration::from_millis(500))));
+    // animation_list.push(Box::new(PulseAnimation::new(HsvWrapper { hue: 60, sat: 255, val: 255 }, Duration::from_millis(500))));
+
+    // Save animation list to NVS
+    storage_service.save_animation_list(&animation_list)?;
+
+    log::info!("Animation list saved to NVS.");
+
 
     // Run animations
     loop {
         for animation in &animation_list {
-            animation.run(&mut ws2812, Duration::from_secs(1));
+            animation.run(&mut ws2812);
         }
     }
     

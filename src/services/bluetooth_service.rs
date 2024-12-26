@@ -10,15 +10,12 @@ use esp_idf_svc::bt::ble::gatt::{
     GattServiceId, GattStatus, Handle, Permission, Property,
 };
 use esp_idf_svc::bt::{BdAddr, Ble, BtDriver, BtStatus, BtUuid};
-use esp_idf_svc::hal::delay::FreeRtos;
-use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::{EspError, ESP_FAIL};
 
-pub fn setup(p : Modem) -> anyhow::Result<()> {
+pub fn setup(modem : Modem) -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
-    let nvs = EspDefaultNvsPartition::take()?;
 
-    let bt = Arc::new(BtDriver::new(p, Some(nvs.clone()))?);
+    let bt = Arc::new(BtDriver::new(modem, None)?);
 
     let server = ExampleServer::new(
         Arc::new(EspBleGap::new(bt.clone())?),
@@ -47,14 +44,14 @@ pub fn setup(p : Modem) -> anyhow::Result<()> {
 
     let mut ind_data = 0_u16;
 
-    loop {
-        server.indicate(&ind_data.to_le_bytes())?;
-        log::info!("Broadcasted indication: {ind_data}");
+    // loop {
+    //     server.indicate(&ind_data.to_le_bytes())?;
+    //     log::info!("Broadcasted indication: {ind_data}");
 
-        ind_data = ind_data.wrapping_add(1);
+    //     ind_data = ind_data.wrapping_add(1);
 
-        FreeRtos::delay_ms(10000);
-    }
+    //     FreeRtos::delay_ms(10000);
+    // }
     Ok(())
 }
 
