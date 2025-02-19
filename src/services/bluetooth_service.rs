@@ -10,50 +10,61 @@ use esp_idf_svc::bt::ble::gatt::{
     GattServiceId, GattStatus, Handle, Permission, Property,
 };
 use esp_idf_svc::bt::{BdAddr, Ble, BtDriver, BtStatus, BtUuid};
+use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::sys::{EspError, ESP_FAIL};
 
-pub fn setup(modem : Modem) -> anyhow::Result<()> {
-    esp_idf_svc::sys::link_patches();
+use log::{info, warn, LevelFilter};
 
-    let bt = Arc::new(BtDriver::new(modem, None)?);
+pub struct BluetoothService;
+impl BluetoothService {
+    pub fn new() -> Self {
+        EspLogger.set_target_level(MAIN_TARGET, LevelFilter::Warn).unwrap();
+        Self
+    }
 
-    let server = ExampleServer::new(
-        Arc::new(EspBleGap::new(bt.clone())?),
-        Arc::new(EspGatts::new(bt.clone())?),
-    );
+    pub fn setup(&self, modem : Modem) -> anyhow::Result<()> {
+        let bt = Arc::new(BtDriver::new(modem, None)?);
 
-    log::info!("BLE Gap and Gatts initialized");
+        let server = ExampleServer::new(
+            Arc::new(EspBleGap::new(bt.clone())?),
+            Arc::new(EspGatts::new(bt.clone())?),
+        );
 
-    let gap_server = server.clone();
+        info!(target: MAIN_TARGET, "BLE Gap and Gatts initialized");
 
-    server.gap.subscribe(move |event| {
-        gap_server.check_esp_status(gap_server.on_gap_event(event));
-    })?;
+        let gap_server = server.clone();
 
-    let gatts_server = server.clone();
+        server.gap.subscribe(move |event| {
+            gap_server.check_esp_status(gap_server.on_gap_event(event));
+        })?;
 
-    server.gatts.subscribe(move |(gatt_if, event)| {
-        gatts_server.check_esp_status(gatts_server.on_gatts_event(gatt_if, event))
-    })?;
+        let gatts_server = server.clone();
 
-    log::info!("BLE Gap and Gatts subscriptions initialized");
+        server.gatts.subscribe(move |(gatt_if, event)| {
+            gatts_server.check_esp_status(gatts_server.on_gatts_event(gatt_if, event))
+        })?;
 
-    server.gatts.register_app(APP_ID)?;
+        info!(target: MAIN_TARGET, "BLE Gap and Gatts subscriptions initialized");
 
-    log::info!("Gatts BTP app registered");
+        server.gatts.register_app(APP_ID)?;
 
-    let mut ind_data = 0_u16;
+        info!(target: MAIN_TARGET, "Gatts BTP app registered");
 
-    // loop {
-    //     server.indicate(&ind_data.to_le_bytes())?;
-    //     log::info!("Broadcasted indication: {ind_data}");
+        // let mut ind_data = 0_u16;
 
-    //     ind_data = ind_data.wrapping_add(1);
+        // loop {
+        //     server.indicate(&ind_data.to_le_bytes())?;
+        //     info!(target: MAIN_TARGET, "Broadcasted indication: {ind_data}");
 
-    //     FreeRtos::delay_ms(10000);
-    // }
-    Ok(())
+        //     ind_data = ind_data.wrapping_add(1);
+
+        //     FreeRtos::delay_ms(10000);
+        // }
+        Ok(())
+    }
 }
+
+const MAIN_TARGET: &'static str = "bluetooth";
 
 const APP_ID: u16 = 0;
 const MAX_CONNECTIONS: usize = 2;
@@ -154,7 +165,7 @@ impl ExampleServer {
                     state.ind_confirmed = Some(conn.peer);
                     let conn = &state.connections[peer_index];
 
-                    log::info!("Indicated data to {}", conn.peer);
+                    info!(target: MAIN_TARGET, "Indicated data to {}", conn.peer);
                     break;
                 } else {
                     state = self.condvar.wait(state).unwrap();
@@ -172,7 +183,7 @@ impl ExampleServer {
     fn on_subscribed(&self, addr: BdAddr) {
         // Put your custom code here or leave empty
         // `indicate()` will anyway send to all connected clients
-        log::warn!("Client {addr} subscribed - put your custom logic here");
+        warn!(target: MAIN_TARGET, "Client {addr} subscribed - put your custom logic here");
     }
 
     /// Sample callback where the user code can handle an unsubscribed client
@@ -182,19 +193,19 @@ impl ExampleServer {
     fn on_unsubscribed(&self, addr: BdAddr) {
         // Put your custom code here
         // `indicate()` will anyway send to all connected clients
-        log::warn!("Client {addr} unsubscribed - put your custom logic here");
+        warn!(target: MAIN_TARGET, "Client {addr} unsubscribed - put your custom logic here");
     }
 
     /// Sample callback where the user code can handle received data
     /// For demo purposes, the data is just logged.
     fn on_recv(&self, addr: BdAddr, data: &[u8], offset: u16, mtu: Option<u16>) {
         // Put your custom code here
-        log::warn!("Received data from {addr}: {data:?}, offset: {offset}, mtu: {mtu:?} - put your custom logic here");
+        warn!(target: MAIN_TARGET, "Received data from {addr}: {data:?}, offset: {offset}, mtu: {mtu:?} - put your custom logic here");
     }
 
     /// The main event handler for the GAP events
     fn on_gap_event(&self, event: BleGapEvent) -> Result<(), EspError> {
-        log::info!("Got event: {event:?}");
+        info!(target: MAIN_TARGET, "Got event: {event:?}");
 
         if let BleGapEvent::AdvertisingConfigured(status) = event {
             self.check_bt_status(status)?;
@@ -210,7 +221,7 @@ impl ExampleServer {
         gatt_if: GattInterface,
         event: GattsEvent,
     ) -> Result<(), EspError> {
-        log::info!("Got event: {event:?}");
+        info!(target: MAIN_TARGET, "Got event: {event:?}");
 
         match event {
             GattsEvent::ServiceRegistered { status, app_id } => {
@@ -638,13 +649,13 @@ impl ExampleServer {
 
     fn check_esp_status(&self, status: Result<(), EspError>) {
         if let Err(e) = status {
-            log::warn!("Got status: {:?}", e);
+            warn!(target: MAIN_TARGET, "Got status: {:?}", e);
         }
     }
 
     fn check_bt_status(&self, status: BtStatus) -> Result<(), EspError> {
         if !matches!(status, BtStatus::Success) {
-            log::warn!("Got status: {:?}", status);
+            warn!(target: MAIN_TARGET, "Got status: {:?}", status);
             Err(EspError::from_infallible::<ESP_FAIL>())
         } else {
             Ok(())
@@ -653,7 +664,7 @@ impl ExampleServer {
 
     fn check_gatt_status(&self, status: GattStatus) -> Result<(), EspError> {
         if !matches!(status, GattStatus::Ok) {
-            log::warn!("Got status: {:?}", status);
+            warn!(target: MAIN_TARGET, "Got status: {:?}", status);
             Err(EspError::from_infallible::<ESP_FAIL>())
         } else {
             Ok(())
